@@ -12,6 +12,7 @@ import study.querydsl.entity.QMember;
 import study.querydsl.entity.Team;
 
 import static org.assertj.core.api.Assertions.*;
+import static study.querydsl.entity.QMember.*;
 
 @SpringBootTest
 @Transactional
@@ -85,4 +86,20 @@ public class QuerydslBasicTest {
 
         assertThat(findMember.getUsername()).isEqualTo("member1");
     }
+
+    /**
+     * 기본 Q-Type 활용
+     * static import 방식으로 사용하고, 만약에 같은 테이블을 조인해야되는 경우가 생기면
+     * 그때만 QMember m1 = new QMember("m1"); <- 이런식으로 별칭을 사용해서 사용하면 됨
+     */
+    @Test
+    public void startQuerydsl3() {
+        Member findMember = queryFactory
+                .select(member)
+                .from(member)
+                .where(member.username.eq("member1"))
+                .fetchOne();
+        assertThat(findMember.getUsername()).isEqualTo("member1");
+    }
+
 }
