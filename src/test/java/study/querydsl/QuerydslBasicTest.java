@@ -4,6 +4,8 @@ import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.PersistenceUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -287,5 +289,155 @@ public class QuerydslBasicTest {
 
         assertThat(teamB.get(team.name)).isEqualTo("teamB");
         assertThat(teamB.get(member.age.avg())).isEqualTo(35);
+    }
+
+    /**
+     * 조인 - 기본 조인
+     * join (조인 대상, 별칭으로 사용할 Q타입)
+     * 팀 A에 소속된 모든 회원을 찾아라.
+     */
+    @Test
+    public void join(){
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .join(member.team, team)
+                .where(team.name.eq("teamA"))
+                .fetch();
+
+        assertThat(result)
+                .extracting("username")
+                .containsExactly("member1", "member2");
+
+    }
+
+    /**
+     * 세타 조인(연관관계가 없는 필드로 조인)
+     * 회원의 이름이 팀 이름과 같은 회원 조회
+     */
+    @Test
+    public void theta_join() throws Exception {
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+
+        List<Member> result = queryFactory
+                .select(member)
+                .from(member, team)
+                .where(member.username.eq(team.name))
+                .fetch();
+
+        assertThat(result)
+                .extracting("username")
+                .containsExactly("teamA", "teamB");
+    }
+
+    /**
+     * 조인 - on절
+     * 1. 조인 대상 필터링 ------>> 이 예제
+     * 2. 연관관계 없는 엔티티 외부 조인
+     *
+     * 예) 회원과 팀을 조인하면서, 팀 이름이 teamA인 팀만 조인, 회원은 모두 조회
+     * JPQL: SELECT m, t FROM Member m LEFT JOIN m.team t on t.name = 'teamA'
+     * SQL:  SELECT m.*, t.* FROM Member m LEFT JOIN Team t ON m.TEAM_ID=t.id and
+     * t.name='teamA'
+     */
+    @Test
+    public void join_on_filtering(){
+        List<Tuple> result = queryFactory
+                .select(member, team)
+                .from(member)
+                .leftJoin(member.team, team).on(team.name.eq("teamA"))
+                .fetch();
+
+        for (Tuple tuple : result) {
+            System.out.println("tuple = " + tuple);
+        }
+    }
+
+    /*
+    결과
+    t=[Member(id=3, username=member1, age=10), Team(id=1, name=teamA)]
+    t=[Member(id=4, username=member2, age=20), Team(id=1, name=teamA)]
+    t=[Member(id=5, username=member3, age=30), null]
+    t=[Member(id=6, username=member4, age=40), null]
+     */
+
+    /**
+     * 1. 조인 대상 필터링
+     * 2. 연관관계 없는 엔티티 외부 조인 ------>> 이 예제
+     *
+     * 예) 회원의 이름과 팀의 이름이 같은 대상 외부 조인
+     * JPQL: SELECT m, t FROM Member m LEFT JOIN Team t on m.username = t.name
+     * SQL: SELECT m.*, t.* FROM Member m LEFT JOIN Team t ON m.username = t.name
+     */
+    @Test
+    public void join_on_no_relation() throws Exception {
+        em.persist(new Member("teamA"));
+        em.persist(new Member("teamB"));
+
+        List<Tuple> result = queryFactory
+                .select(member, team)
+                .from(member)
+                .leftJoin(team).on(member.username.eq(team.name))
+                //.leftJoin(member.team, team).on(member.username.eq(team.name)) //이렇게 하면 id로 매칭
+                .fetch();
+
+        for (Tuple tuple : result) {
+            System.out.println("tuple =" + tuple);
+        }
+    }
+
+    /*
+    결과
+    t=[Member(id=3, username=member1, age=10), null]
+    t=[Member(id=4, username=member2, age=20), null]
+    t=[Member(id=5, username=member3, age=30), null]
+    t=[Member(id=6, username=member4, age=40), null]
+    t=[Member(id=7, username=teamA, age=0), Team(id=1, name=teamA)]
+    t=[Member(id=8, username=teamB, age=0), Team(id=2, name=teamB)]
+     */
+
+
+    /**
+     * 조인 - 페치조인
+     * 페치 조인 미적용시!
+     */
+    @PersistenceUnit
+    EntityManagerFactory emf;
+
+    @Test
+    public void fetchJoinNo(){
+        em.flush();
+        em.clear();
+
+        //lazy라서 member만 조회됨
+        Member findMember = queryFactory
+                .selectFrom(member)
+                .where(member.username.eq("member1"))
+                .fetchOne();
+        
+        //진짜 member만 조회되는지 증명해보자.
+        boolean loaded =
+                emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+        assertThat(loaded).as("페치 조인 미적용").isFalse();
+    }
+
+    /**
+     * 조인 - 페치조인
+     * 페치 조인 적용시!
+     */
+    @Test
+    public void fetchJoinUse(){
+        em.flush();
+        em.clear();
+
+        Member findMember = queryFactory
+                .selectFrom(member)
+                .join(member.team, team).fetchJoin()
+                .where(member.username.eq("member1"))
+                .fetchOne();
+
+        boolean loaded =
+                emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+        assertThat(loaded).as("페치 조인 적용").isTrue();
     }
 }
