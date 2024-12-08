@@ -815,4 +815,99 @@ public class QuerydslBasicTest {
     private BooleanExpression ageEq(Integer ageCond) {
         return ageCond != null ? member.age.eq(ageCond) : null;
     }
+
+    /**
+     * 수정, 삭제 벌크 연산
+     */
+    @Test
+    public void bulkUpdate(){
+
+        // member1 = 10 -> member1
+        // member2 = 20 -> member2
+        // member3 = 30 -> member3
+        // member4 = 40 -> member4
+
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        // member1 = 10 -> 비회원
+        // member2 = 20 -> 비회원
+        // member3 = 30 -> member3
+        // member4 = 40 -> member4
+
+        //영속성 컨텍스트가 항상 우선권을 가짐
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .fetch();
+
+        // Repeatable Read
+        for (Member member : result){
+            System.out.println("member = " + member);
+        }
+    }
+
+    /**
+     * 벌크 연산을 수행하고 나면,
+     * 영속성 컨텍스트를 초기화 해주는 게 좋다!
+     */
+    @Test
+    public void bulkUpdate2(){
+
+        // member1 = 10 -> member1
+        // member2 = 20 -> member2
+        // member3 = 30 -> member3
+        // member4 = 40 -> member4
+
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        //영속성 컨텍스트에 있는 걸 다 내보내고 초기화!!
+        em.flush();
+        em.clear();
+
+        // member1 = 10 -> 비회원
+        // member2 = 20 -> 비회원
+        // member3 = 30 -> member3
+        // member4 = 40 -> member4
+
+        //영속성 컨텍스트가 항상 우선권을 가짐
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .fetch();
+
+        // Repeatable Read
+        for (Member member : result){
+            System.out.println("member = " + member);
+        }
+    }
+
+    @Test
+    public void bulkAdd(){
+        long count = queryFactory
+                .update(member)
+                .set(member.age, member.age.add(1))
+                .execute();
+    }
+
+    @Test
+    public void bulkMultiply(){
+        long count = queryFactory
+                .update(member)
+                .set(member.age, member.age.multiply(2))
+                .execute();
+    }
+
+    @Test
+    public void bulkDelete(){
+        long count = queryFactory
+                .delete(member)
+                .where(member.age.gt(18))
+                .execute();
+    }
 }
